@@ -30,8 +30,6 @@ ACTIVITY_LOG = os.path.join(LOG_DIR, "activity_monitor.log")
 LOCK_FILE = "/tmp/activity_monitor.lock"
 
 GARTH_HOME = "/home/david/.cache/garmin-mcp/garth"
-GARMIN_EMAIL = None   # loaded from garth tokens - no credentials needed
-GARMIN_PASSWORD = None
 
 CLAUDE_TIMEOUT_SECONDS = 300
 
@@ -144,18 +142,13 @@ def init_db(conn: sqlite3.Connection) -> None:
 # ---------------------------------------------------------------------------
 
 def connect_garmin():
-    """Connect to Garmin using stored garth OAuth tokens."""
+    """Connect to Garmin using stored OAuth tokens."""
     try:
-        import garth
         import garminconnect
 
-        garth.resume(GARTH_HOME)
         client = garminconnect.Garmin()
-        client.garth = garth
-        # Patch the session so garminconnect uses garth's authenticated session
-        client.session = garth.client.sess
-        client.display_name = garth.profile.get("displayName", "david")
-        log("Garmin connected via garth tokens")
+        client.login(GARTH_HOME)
+        log("Garmin connected via stored tokens")
         return client
     except Exception as e:
         log(f"Failed to connect to Garmin: {e}")
