@@ -1,0 +1,20 @@
+{
+  "title": "Diarium Athleticum",
+  "description": "Corpus Exercitationum — Registros de entrenamiento",
+  "databases": {
+    "training": {
+      "title": "Training",
+      "tables": {
+        "activities": {
+          "title": "Actividades",
+          "description": "Historial de entrenos",
+          "sort_desc": "date"
+        },
+        "weekly_context": {
+          "title": "Contexto Semanal",
+          "description": "Eventos y circunstancias de vida activos"
+        }
+      }
+    }
+  }
+}
