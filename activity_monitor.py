@@ -347,6 +347,14 @@ def _handle_activity(conn: sqlite3.Connection, client, act: dict) -> None:
     if not activity_id:
         return
 
+    # Date filter: only process activities from the last 48h
+    act_date_str = (act.get("startTimeLocal") or act.get("startTimeGMT") or "")[:10]
+    if act_date_str:
+        cutoff = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 48 * 3600))
+        if act_date_str < cutoff:
+            log(f"Skipping {activity_id}: date {act_date_str} older than 48h cutoff {cutoff}")
+            return
+
     # Duration filter (> 600s)
     duration = float(act.get("duration", act.get("elapsedDuration", 0)) or 0)
     if duration <= 600:
