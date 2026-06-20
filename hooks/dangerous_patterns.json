@@ -1,0 +1,62 @@
+[
+  {
+    "name": "docker_volume_rm",
+    "pattern": "docker\\s+volume\\s+rm\\b",
+    "description": "Deletes a Docker volume (data loss)"
+  },
+  {
+    "name": "compose_down_volumes",
+    "pattern": "docker[-\\s]compose\\s+.*\\bdown\\b.*(-v\\b|--volumes\\b)",
+    "description": "docker compose down with volume removal"
+  },
+  {
+    "name": "docker_prune_aggressive",
+    "pattern": "docker\\s+(system|volume|container|image)\\s+prune\\b.*(-a\\b|--all\\b|--volumes\\b|-f\\b)",
+    "description": "Aggressive docker prune that can remove volumes/images"
+  },
+  {
+    "name": "docker_rm_volumes",
+    "pattern": "docker\\s+rm\\b.*-v\\b",
+    "description": "Container removal with volume flag"
+  },
+  {
+    "name": "rm_recursive_force",
+    "pattern": "\\brm\\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*|--recursive\\b.*--force\\b|--force\\b.*--recursive\\b)",
+    "description": "Recursive force delete"
+  },
+  {
+    "name": "shutdown_reboot",
+    "pattern": "\\b(shutdown|reboot|poweroff|halt)\\b",
+    "description": "Server shutdown or reboot"
+  },
+  {
+    "name": "systemctl_power",
+    "pattern": "systemctl\\s+(reboot|poweroff|halt)\\b",
+    "description": "systemctl-triggered shutdown/reboot"
+  },
+  {
+    "name": "systemctl_disrupt",
+    "pattern": "systemctl\\s+(stop|disable|mask)\\b",
+    "description": "Stopping, disabling, or masking a systemd unit"
+  },
+  {
+    "name": "kill_force",
+    "pattern": "\\b(kill\\s+(-9\\b|-KILL\\b|-s\\s*9\\b|-s\\s*KILL\\b)|pkill\\b|killall\\b)",
+    "description": "Forceful process termination"
+  },
+  {
+    "name": "disk_format",
+    "pattern": "\\b(mkfs(\\.\\w+)?|fdisk|parted|wipefs)\\b",
+    "description": "Disk formatting/partitioning utility"
+  },
+  {
+    "name": "dd_to_device",
+    "pattern": "\\bdd\\s+.*\\bof=/dev/",
+    "description": "Raw write to a block device"
+  },
+  {
+    "name": "butler_self_restart",
+    "pattern": "systemctl\\s+(restart|start|stop|reload)\\s+(claude-butler|relay)",
+    "description": "Restarting the claude-butler service kills the running Claude process and loses the in-flight response. Send a Telegram message first to warn David, then confirm restart."
+  }
+]

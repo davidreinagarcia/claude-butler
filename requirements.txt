@@ -1,0 +1,3 @@
+# No third-party dependencies - relay.py and hooks/guard.py use only the
+# Python stdlib (urllib for Telegram's HTTP API). Kept as an empty manifest
+# in case future additions need one.
