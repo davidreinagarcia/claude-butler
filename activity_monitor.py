@@ -28,6 +28,7 @@ TRAINING_DB = os.path.join(STATE_DIR, "training.db")
 FITNESS_MEMORY_FILE = os.path.join(STATE_DIR, "fitness_memory.md")
 ACTIVITY_LOG = os.path.join(LOG_DIR, "activity_monitor.log")
 LOCK_FILE = "/tmp/activity_monitor.lock"
+VO2MAX_CHECK_FILE = os.path.join(STATE_DIR, "vo2max_last_check.txt")
 
 GARTH_HOME = "/home/david/.cache/garmin-mcp/garth"
 
@@ -132,6 +133,13 @@ def init_db(conn: sqlite3.Connection) -> None:
             created_at TEXT,
             expires_at TEXT,
             promoted INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS vo2max_history (
+            date TEXT PRIMARY KEY,
+            vo2max_running REAL,
+            vo2max_cycling REAL,
+            fetched_at TEXT
         );
     """)
     conn.commit()
@@ -249,6 +257,55 @@ def run_claude_analysis(prompt: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# VO2max — checked at most once/day via Garmin's training-status endpoint,
+# which always surfaces the most recent known value (with its own
+# calendarDate) regardless of the date queried. Stored under that date so
+# the history reflects when Garmin actually recomputed it, not when we
+# happened to poll.
+# ---------------------------------------------------------------------------
+
+def _should_check_vo2max() -> bool:
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    try:
+        with open(VO2MAX_CHECK_FILE) as f:
+            return f.read().strip() != today
+    except FileNotFoundError:
+        return True
+
+
+def sync_vo2max(conn: sqlite3.Connection, client) -> None:
+    if not _should_check_vo2max():
+        return
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    try:
+        status = client.get_training_status(today)
+        mv = (status or {}).get("mostRecentVO2Max") or {}
+        generic = mv.get("generic") or {}
+        cycling = mv.get("cycling") or {}
+        running_val = generic.get("vo2MaxValue")
+        cycling_val = cycling.get("vo2MaxValue")
+        measured_date = generic.get("calendarDate") or cycling.get("calendarDate")
+
+        if measured_date and (running_val or cycling_val):
+            conn.execute(
+                """INSERT OR IGNORE INTO vo2max_history
+                   (date, vo2max_running, vo2max_cycling, fetched_at)
+                   VALUES (?, ?, ?, ?)""",
+                (measured_date, running_val, cycling_val,
+                 time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+            )
+            conn.commit()
+            log(f"VO2max checked: running={running_val} cycling={cycling_val} (as of {measured_date})")
+        else:
+            log("VO2max checked: no data returned")
+
+        with open(VO2MAX_CHECK_FILE, "w") as f:
+            f.write(today)
+    except Exception as e:
+        log(f"Failed to sync VO2max: {e}")
+
+
+# ---------------------------------------------------------------------------
 # Expire weekly context into fitness_memory.md
 # ---------------------------------------------------------------------------
 
@@ -327,6 +384,8 @@ def _process_activities(conn: sqlite3.Connection) -> None:
     except Exception as e:
         log(f"Failed to get activities: {e}")
         return
+
+    sync_vo2max(conn, client)
 
     if not activities:
         log("No activities returned from Garmin")

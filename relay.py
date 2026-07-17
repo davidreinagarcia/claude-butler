@@ -22,8 +22,6 @@ SESSION_FILE = os.path.join(STATE_DIR, "session_id.txt")
 PENDING_FILE = os.path.join(STATE_DIR, "pending_approval.json")
 RESUME_FILE  = os.path.join(STATE_DIR, "resume_task.json")
 RESTART_FILE = os.path.join(STATE_DIR, "restart_requested.json")
-TRAINING_DB      = os.path.join(STATE_DIR, "training.db")
-FITNESS_LAST_REPORT = os.path.join(STATE_DIR, "fitness_last_report.txt")
 AUDIT_LOG    = os.path.join(LOG_DIR, "audit.log")
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
@@ -474,57 +472,6 @@ _INSTANT_COMMANDS = {
 }
 
 
-def _build_session_context() -> str:
-    """Build a brief context block to prepend when starting a fresh session."""
-    parts = []
-
-    # Today's planned workout (extract ENTRENO DE HOY block from coach report)
-    report = _read_text(FITNESS_LAST_REPORT, "")
-    if report:
-        idx = report.upper().find("ENTRENO DE HOY")
-        if idx != -1:
-            snippet = [l.strip() for l in report[idx:idx+350].split("\n") if l.strip()][:7]
-            parts.append("Entreno planificado hoy: " + " | ".join(snippet))
-
-    # Active weekly context from SQLite
-    try:
-        import sqlite3
-        today = time.strftime("%Y-%m-%d")
-        conn = sqlite3.connect(TRAINING_DB)
-        rows = conn.execute(
-            "SELECT note FROM weekly_context WHERE expires_at >= ? AND promoted = 0",
-            (today,),
-        ).fetchall()
-        conn.close()
-        for row in rows:
-            parts.append(f"Contexto activo esta semana: {row[0]}")
-    except Exception:
-        pass
-
-    # Last recorded activity
-    try:
-        import sqlite3
-        conn = sqlite3.connect(TRAINING_DB)
-        row = conn.execute(
-            "SELECT date, name, distance_meters, avg_heart_rate FROM activities "
-            "ORDER BY date DESC LIMIT 1"
-        ).fetchone()
-        conn.close()
-        if row:
-            dist = f" {row[2]/1000:.1f}km" if row[2] else ""
-            parts.append(f"Ultimo entreno registrado: {row[1]} ({row[0]}{dist}, FC{row[3]})")
-    except Exception:
-        pass
-
-    if not parts:
-        return ""
-    return (
-        "[Contexto automatico - no mencionar a David salvo que sea relevante]\n"
-        + "\n".join(parts)
-        + "\n[Fin contexto]\n\n"
-    )
-
-
 # ---------------------------------------------------------------------------
 # Message router
 # ---------------------------------------------------------------------------
@@ -563,12 +510,6 @@ def handle_message(text: str) -> None:
         log_audit({"event": "inbound_command", "command": cmd})
         threading.Thread(target=run_claude, args=(_CLAUDE_COMMANDS[cmd],), daemon=True).start()
         return
-
-    # Inject context when starting a new session
-    if not get_session_id() and not text.startswith("/"):
-        ctx = _build_session_context()
-        if ctx:
-            text = ctx + text
 
     log_audit({"event": "inbound_message", "text": text[:200]})
     threading.Thread(target=run_claude, args=(text,), daemon=True).start()

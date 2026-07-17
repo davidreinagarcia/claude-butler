@@ -4,6 +4,7 @@ Reads Garmin data via MCP, analyzes training, sends Telegram report.
 Daily on weekdays; Mondays add Training Status metrics + weekly plan."""
 
 import json
+import sqlite3
 import os
 import subprocess
 import sys
@@ -17,6 +18,7 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 FITNESS_SESSION_FILE = os.path.join(STATE_DIR, "fitness_session_id.txt")
 FITNESS_MEMORY_FILE = os.path.join(STATE_DIR, "fitness_memory.md")
 FITNESS_LOG = os.path.join(LOG_DIR, "fitness_coach.log")
+TRAINING_DB = os.path.join(STATE_DIR, "training.db")
 FITNESS_LAST_REPORT = os.path.join(STATE_DIR, "fitness_last_report.txt")
 
 CLAUDE_TIMEOUT_SECONDS = 900
@@ -134,7 +136,11 @@ WEEKLY_ADDENDUM = """
 
 PASO ADICIONAL (HOY ES LUNES) - Training Status:
 Antes del informe diario, consulta estas métricas de Garmin:
-- VO2 Max (valor actual y tendencia últimos 30 días: subiendo/estable/bajando)
+- VO2 Max: consulta la tabla vo2max_history en /opt/claude-butler/state/training.db
+  (columnas date, vo2max_running, vo2max_cycling) en vez de fiarte de una sola
+  lectura MCP — tiene histórico real desde enero 2026, se actualiza sola cada vez
+  que Garmin recalcula el valor. Usa el valor más reciente y compáralo con el de
+  hace ~30 días para dar la tendencia (subiendo/estable/bajando) con números reales.
 - Training Status (Productive/Maintaining/Peaking/Recovery/Unproductive/Detraining)
 - Training Load últimos 7 días vs los 7 anteriores
 - Acute Load / Chronic Load ratio si está disponible
@@ -150,6 +156,33 @@ Mar: ...
 Basa el plan en: carga acumulada de las últimas 3 semanas, training status actual, y los objetivos en la memoria.
 Si hay entreno de gym, ponlo el lunes (es fijo para David).
 """
+
+
+def extract_plan_block(report: str) -> str:
+    marker = "ENTRENO DE HOY"
+    idx = report.upper().find(marker)
+    if idx == -1:
+        return report[:600]
+    block = report[idx:idx + 600]
+    # Cut at first blank line after the block starts
+    double_nl = block.find(chr(10) + chr(10), 80)
+    if double_nl != -1:
+        block = block[:double_nl]
+    return block.strip()
+
+def save_daily_plan(date_str: str, plan_text: str, full_report: str) -> None:
+    try:
+        conn = sqlite3.connect(TRAINING_DB)
+        conn.execute(
+            """INSERT OR REPLACE INTO daily_plans (date, plan_text, full_report, created_at)
+               VALUES (?, ?, ?, datetime('now'))""",
+            (date_str, plan_text, full_report),
+        )
+        conn.commit()
+        conn.close()
+        log(f"Daily plan saved to DB for {date_str}")
+    except Exception as exc:
+        log(f"Error saving daily plan: {exc}")
 
 
 def run() -> None:
@@ -204,6 +237,8 @@ def run() -> None:
     with open(FITNESS_LAST_REPORT, "w") as f:
         f.write(f"# Informe fitness {date_str}\n\n{result}")
     send_telegram(result)
+    plan_text = extract_plan_block(result)
+    save_daily_plan(date_str, plan_text, result)
     log("Done")
 
 

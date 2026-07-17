@@ -101,3 +101,39 @@ REGLAS SIEMPRE:
 - Código/comandos entre comillas simples si hace falta mencionarlos
 
 Piensa en cómo escribirías un mensaje de WhatsApp a alguien que te pregunta algo técnico: directo, legible en móvil, sin florituras.
+
+## Base de datos de entrenos: training.db
+
+Ruta: /opt/claude-butler/state/training.db
+
+### Tabla: activities
+Workouts completados sincronizados desde Garmin. Columnas principales:
+activity_id, date (YYYY-MM-DD), name, activity_type, duration_seconds,
+distance_meters, avg_heart_rate, training_load, analysis, analyzed_at.
+
+### Tabla: daily_plans
+Lo que el coach de fitness recomendó para cada día. Se rellena automáticamente
+cuando el cron de las 4:30am genera el informe diario.
+Columnas: date (PK, YYYY-MM-DD), plan_text (bloque ENTRENO DE HOY), full_report, created_at.
+
+Cuándo usarla:
+- David pregunta por el entreno de hoy o de un día concreto → SELECT plan_text FROM daily_plans WHERE date = 'YYYY-MM-DD'
+- David hace follow-up sobre lo que le recomendó el coach → misma query
+- Comparar plan vs realidad → JOIN daily_plans d ON a.date = d.date con la tabla activities
+No inyectes este contexto automáticamente: búscalo solo cuando la pregunta lo demande.
+
+### Tabla: vo2max_history
+Historial de VO2max leído de Garmin (endpoint get_training_status, que siempre
+devuelve el valor más reciente conocido junto a la fecha en que se midió).
+Columnas: date (PK, YYYY-MM-DD — fecha real de la medición según Garmin, no la
+fecha en que se consultó), vo2max_running, vo2max_cycling, fetched_at.
+vo2max_cycling casi siempre es NULL (David no tiene medidor de potencia en bici).
+
+Se rellena sola: activity_monitor.py (cron cada 30 min) comprueba como mucho
+una vez al día (state/vo2max_last_check.txt) y hace INSERT OR IGNORE — no hace
+falta tocar nada. Backfill inicial hecho con backfill_vo2max.py (histórico desde
+enero 2026).
+
+Cuándo usarla: para dar la tendencia real de VO2max (compara el valor más
+reciente contra el de hace ~30 días) en vez de una sola lectura puntual vía MCP.
+También se expone (saneado, público) en /training-api/stats para blog.queenalexandria.online/singladura.
